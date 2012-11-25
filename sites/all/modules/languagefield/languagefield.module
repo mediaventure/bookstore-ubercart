@@ -1,0 +1,228 @@
+<?php
+
+/**
+ * Helper function to generate the language options list.
+ */
+function languagefield_options($include_native = FALSE) {
+  static $predefined = NULL, $predefined_with_native = NULL;
+  if (!$predefined) {
+    // @see _locale_prepare_predefined_list()
+    require_once DRUPAL_ROOT . '/includes/iso.inc';
+    $predefined = _locale_get_predefined_list();
+    foreach ($predefined as $key => $value) {
+      // Include native name in output, if possible
+      $tname = t($value[0]);
+      $predefined_with_native[$key] = $tname;
+      $predefined[$key] = $tname;
+      if (count($value) > 1) {
+        $predefined_with_native[$key] = ($tname == $value[1]) ? $tname : "$tname ($value[1])";
+      }
+    }
+    asort($predefined);
+    asort($predefined_with_native);
+  }
+  return $include_native ? $predefined_with_native : $predefined;
+}
+
+/**
+ * Implement hook_field_info().
+ */
+function languagefield_field_info() {
+  return array(
+    'language_field' => array(
+      'label' => t('Languages'),
+      'description' => t('This field stores a language reference in the database.'),
+      'settings' => array('languages' => array(), 'excluded_languages' => array(), 'groups' => ''),
+      'default_widget' => 'options_select',
+      'default_formatter' => 'language_default',
+    ),
+  );
+}
+
+
+/**
+ * Implement hook_field_load().
+ */
+function languagefield_field_load($obj_type, $objects, $field, $instances, $langcode, &$items) {
+  $languages = languagefield_options(FALSE);
+  $languages_with_native = languagefield_options(FALSE);
+
+  foreach ($objects as $id => $object) {
+    foreach ($items[$id] as $delta => $item) {
+      $items[$id][$delta]['safe_value'] = $languages[$item['value']];
+      $items[$id][$delta]['safe_value_with_native'] = $languages_with_native[$item['value']];
+    }
+  }
+}
+
+/**
+ * Implement hook_field_is_empty().
+ */
+function languagefield_field_is_empty($item, $field) {
+  return empty($item['value']);
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function languagefield_field_formatter_info() {
+  $formatters = array(
+    'language_default' => array(
+      'label' => t('Default'),
+      'field types' => array('language_field'),
+    ),
+  );
+  return $formatters;
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function languagefield_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array();
+  foreach ($items as $delta => $item) {
+    switch ($display['type']) {
+      case 'language_default':
+        $element[$delta]['#markup'] = $item['safe_value'];
+        break;
+
+      default:
+    }
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_widget_info_alter().
+ */
+function languagefield_field_widget_info_alter(&$info) {
+  $info['options_buttons']['field types'][] = 'language_field';
+  $info['options_select']['field types'][] = 'language_field';
+}
+
+/**
+ * Implements hook_options_list().
+ */
+function languagefield_options_list($field) {
+  $function = !empty($field['settings']['options_list_callback']) ? $field['settings']['options_list_callback'] : 'languagefield_options';
+
+  $languages = array_filter($field['settings']['languages']);
+  $include_native = !empty($field['settings']['include_native']);
+
+  $all_languages = $function($include_native);
+  if (!empty($languages)) {
+    $all_languages = array_intersect_key($all_languages, $languages);
+  }
+  if (!empty($field['settings']['excluded_languages'])) {
+    $all_languages = array_diff_key($all_languages, $field['settings']['excluded_languages']);
+  }
+
+  if (!empty($field['settings']['groups'])) {
+    $grouped_languages = array();
+    $found_languages = array();
+    $all_languages += array('other' => t('Other languages'));
+    foreach(explode("\n", $field['settings']['groups']) as $line) {
+      if (strpos($line, '|') !== FALSE) {
+        list($group, $langs) = explode('|', $line, 2);
+        $langs = array_filter(array_map('trim', explode(',', $langs)));
+        $langs = array_intersect_key($all_languages, array_combine($langs, $langs));
+        $found_languages += $langs;
+        $grouped_languages[$group] = $langs;
+      }
+      else {
+        $langs = array_filter(array_map('trim', explode(',', $line)));
+        if (!empty($langs)) {
+          $langs = array_intersect_key($all_languages, array_combine($langs, $langs));
+          $found_languages += (array)$langs;
+          $grouped_languages += (array)$langs;
+        }
+      }
+    }
+    $missing_languages = array_diff_key($all_languages, $found_languages);
+    foreach ($grouped_languages as $index => $options) {
+      if (is_array($options)) {
+        if (isset($options['other'])) {
+          unset($options['other']);
+          if ($missing_languages) {
+            $grouped_languages[$index] = array_merge($grouped_languages[$index], $missing_languages);
+            $missing_languages = FALSE;
+          }
+        }
+        asort($grouped_languages[$index]);
+      }
+    }
+    if (isset($grouped_languages['other'])) {
+      unset($grouped_languages['other']);
+      if ($missing_languages) {
+        $grouped_languages = array_merge($grouped_languages, $missing_languages);
+      }
+    }
+    return $grouped_languages;
+  }
+  return $all_languages;
+}
+
+/**
+ * Implement hook_field_settings_form().
+ */
+function languagefield_field_settings_form($field, $instance, $has_data) {
+  $settings = $field['settings'];
+
+  $form['include_native'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Include translated language in widget'),
+    '#default_value' => !empty($settings['include_native']),
+  );
+
+  $form['languages'] = array(
+    '#type' => 'select',
+    '#title' => t('Restrict by language'),
+    '#default_value' => isset($settings['languages']) ? $settings['languages'] : array(),
+    '#options' => array('' => t('--')) + languagefield_options(),
+    '#description' => t('If no languages are selected, this filter will not be used.'),
+    '#multiple' => TRUE,
+    '#size' => 10,
+  );
+
+  $form['excluded_languages'] = array(
+    '#type' => 'select',
+    '#title' => t('Excluded languages'),
+    '#default_value' => isset($settings['excluded_languages']) ? $settings['excluded_languages'] : array(),
+    '#options' => array('' => t('--')) + languagefield_options(),
+    '#description' => t('This removes individual languages from the list.'),
+    '#multiple' => TRUE,
+    '#size' => 10,
+  );
+
+  $form['groups'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Language groups'),
+    '#default_value' => isset($settings['groups']) ? $settings['groups'] : '',
+    '#description' => t("Provides a simple way to group common languages. If no groups are provided, no groupings will be used. Enter in the following format:<br/><code>cn,en,ep,ru<br/>African languages|bs,br<br/>Asian languages|cn,km,fil,ja</code>"),
+    '#multiple' => TRUE,
+    '#size' => 10,
+  );
+  $form['groups_help'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Group help'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+  $items = array();
+  foreach (languagefield_options() as $key => $value) {
+    $items[] = t('<strong>!key</strong>: %title', array('!key' => $key, '%title' => $value));
+  }
+  $form['groups_help']['keys'] = array(
+    '#type' => 'item',
+    '#title' => t('Full language / key listing'),
+    '#markup' => theme('item_list', array('items' => $items)),
+  );
+  $form['groups_help']['all'] = array(
+    '#type' => 'item',
+    '#title' => t('Available keys'),
+    '#markup' => '<p>' . implode(',', array_keys(languagefield_options())) . '</p>',
+  );
+
+  return $form;
+}

@@ -1,0 +1,20 @@
+
+/* Clean file for your awesome overrides, enable in the info file to use. */
+.center-text {
+	text-align: center;
+	margin-right: 120px;
+	width: 200px;
+	height: auto;
+}
+.bookcover-grid img {
+	width: 158px;
+	height: 220px;
+}
+.bookcover-similar-entry img {
+	width: 64px;
+	height: 85px;
+}
+div.goog-te-gadget {
+	top: 50px;
+}
+

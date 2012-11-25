@@ -1,0 +1,24 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Books</title>
+</head>
+<body>
+	<h1>Books formatter</h1>
+	<p>
+Link za google knjige:
+<br/>
+https://www.googleapis.com/books/v1/volumes?q=QUERY&maxResults=5&printType=books&fields=items(id%2CvolumeInfo(authors%2Ccategories%2Cdescription%2CimageLinks%2CindustryIdentifiers%2CinfoLink%2Clanguage%2CpageCount%2CpreviewLink%2CpublishedDate%2Cpublisher%2Csubtitle%2Ctitle))&pp=1&key=AIzaSyCxL2Dcd5pntzQtDYz73MF2Z-b8Xfj_wL4
+</p>
+	<form method="post" action="books2.php">
+		<label for="query">Qyery:</label> <br /> 
+		<input type="text" id="query" name="query" /> <br/>
+		<label for="category">Category:</label> <br/>
+		<input type="text" id="category" name="category" />
+		<label for="max_res">Max results (1-40):</label> <br/>
+		<input type="text" id="max_res" name="max_res" value="40"/>
+		<br /><br/> <input type="submit" value="Get JSON" />
+	</form>
+</body>
+</html>
